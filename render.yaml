@@ -1,0 +1,32 @@
+# render.yaml — Configuración de servicio en Render.com
+# Render detecta este archivo automáticamente al conectar el repo
+# Documentación: https://render.com/docs/render-yaml-spec
+
+services:
+  - type: web
+    name: hola-mundo-devops
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+
+    # Imagen de Docker Hub (se actualiza con cada push via GitHub Actions)
+    image:
+      url: docker.io/TU_USUARIO/hola-mundo-devops:latest
+
+    # Región del servidor
+    region: ohio
+
+    # Plan gratuito de Render
+    plan: free
+
+    # Puerto que expone la app (debe coincidir con EXPOSE en Dockerfile)
+    port: 5000
+
+    # Variables de entorno en producción
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 5000
+
+    # Health check — Render verifica que la app responde
+    healthCheckPath: /health

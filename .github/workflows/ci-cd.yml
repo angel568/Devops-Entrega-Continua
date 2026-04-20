@@ -1,0 +1,147 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  CI/CD Pipeline — Hola Mundo DevOps
+#  Triggers: push a main  |  pull request a main
+#
+#  Jobs:
+#    1. test      → verifica que la app arranca correctamente
+#    2. docker    → build & push imagen a Docker Hub
+#    3. deploy    → deploy automático en Render.com
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/hola-mundo-devops
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 1 — TEST
+# ──────────────────────────────────────────────────────────────────────────────
+jobs:
+  test:
+    name: 🧪 Test Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Verificar que la app arranca
+        run: |
+          python app.py &
+          APP_PID=$!
+          sleep 3
+          curl --fail http://localhost:5000/health || (kill $APP_PID && exit 1)
+          kill $APP_PID
+          echo "✅ App respondió correctamente en /health"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 2 — DOCKER BUILD & PUSH
+# ──────────────────────────────────────────────────────────────────────────────
+  docker:
+    name: 🐳 Build & Push Docker Hub
+    runs-on: ubuntu-latest
+    needs: test                      # Solo corre si los tests pasan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # Genera tags: latest + número de versión basado en el SHA del commit
+      - name: Generar metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Habilita builds multi-arquitectura (amd64 + arm64)
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y Push imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha        # Caché de GitHub Actions
+          cache-to: type=gha,mode=max
+
+      - name: Resumen del push
+        run: |
+          echo "### 🐳 Docker Image publicada" >> $GITHUB_STEP_SUMMARY
+          echo "**Imagen:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 3 — DEPLOY A RENDER.COM
+# ──────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy a Render.com
+    runs-on: ubuntu-latest
+    needs: docker                    # Solo despliega si la imagen fue publicada
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Trigger Deploy en Render
+        run: |
+          echo "Iniciando deploy en Render.com..."
+          RESPONSE=$(curl --silent --write-out "\n%{http_code}" \
+            --request POST \
+            --url "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            --header "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            --header "Content-Type: application/json" \
+            --data '{"clearCache": false}')
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_STATUS" -eq 201 ]; then
+            echo "✅ Deploy iniciado exitosamente en Render.com"
+            DEPLOY_ID=$(echo $BODY | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "N/A")
+            echo "Deploy ID: $DEPLOY_ID"
+          else
+            echo "❌ Error al iniciar deploy. Status: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Resumen del deploy
+        if: success()
+        run: |
+          echo "### 🚀 Deploy completado" >> $GITHUB_STEP_SUMMARY
+          echo "**Proveedor:** Render.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Estado:** ✅ Deploy iniciado exitosamente" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Autor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
