@@ -115,12 +115,13 @@ jobs:
       - name: Trigger Deploy en Render
         run: |
           echo "Iniciando deploy en Render.com..."
+
+          # La API de Render no requiere body — solo el header de autenticación
           RESPONSE=$(curl --silent --write-out "\n%{http_code}" \
             --request POST \
             --url "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
             --header "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            --header "Content-Type: application/json" \
-            --data '{"clearCache": false}')
+            --header "Accept: application/json")
 
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n -1)
@@ -130,10 +131,11 @@ jobs:
 
           if [ "$HTTP_STATUS" -eq 201 ]; then
             echo "✅ Deploy iniciado exitosamente en Render.com"
-            DEPLOY_ID=$(echo $BODY | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "N/A")
+            DEPLOY_ID=$(echo $BODY | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id', d.get('deploy',{}).get('id','N/A')))" 2>/dev/null || echo "N/A")
             echo "Deploy ID: $DEPLOY_ID"
           else
             echo "❌ Error al iniciar deploy. Status: $HTTP_STATUS"
+            echo "Detalle: $BODY"
             exit 1
           fi
 
