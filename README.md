@@ -103,16 +103,15 @@ git add . && git commit -m "test: trigger CI/CD pipeline"
 git push
 
 # Ver el pipeline corriendo en:
-# https://github.com/TU_USUARIO/hola-mundo-devops/actions
-```
+# https://github.com/angel568/Devops-Entrega-Continua/actions
 
 ---
 
 ## 🔍 Verificar resultados
 
-- **GitHub Actions:** https://github.com/TU_USUARIO/hola-mundo-devops/actions
-- **Docker Hub:** https://hub.docker.com/r/TU_USUARIO/hola-mundo-devops
-- **App en producción:** https://hola-mundo-devops.onrender.com
+- **GitHub Actions:** hhttps://github.com/angel568/Devops-Entrega-Continua/actions
+- **Docker Hub:** https://hub.docker.com/r/angelmorillo/hola-mundo-devops
+- **App en producción:** https://devops-entrega-continua.onrender.com
 
 ---
 
@@ -126,4 +125,5 @@ git push
 | Contenedor | Docker | ✅ |
 | Registry | Docker Hub | ✅ |
 | Producción | Render.com | ✅ |
+# cambio
 # cambio
